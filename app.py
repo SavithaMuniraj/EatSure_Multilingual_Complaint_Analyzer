@@ -31,6 +31,12 @@ st.markdown("""
 .small-note { color:#496174; font-size:.9rem; }
 
 /* Keep form controls and open menus readable even when the viewer prefers dark mode. */
+[data-testid="stSelectbox"] [role="group"] { background-color: #ffffff !important; border: 1px solid #b8c9d5 !important; border-radius: .5rem !important; }
+[data-testid="stSelectbox"] [role="combobox"] { background: transparent !important; color: #183247 !important; -webkit-text-fill-color: #183247 !important; }
+[data-testid="stSelectbox"] [role="group"] svg { color: #52697a !important; }
+[data-testid="stCheckbox"] label > div:first-of-type { background-color: #ffffff !important; border: 1px solid #52697a !important; }
+[data-testid="stCheckbox"] label:has(input:checked) > div:first-of-type { background-color: #147a58 !important; border-color: #147a58 !important; }
+
 [data-testid="stTextArea"] textarea, [data-testid="stTextInput"] input, [data-testid="stNumberInput"] input, [data-baseweb="select"] > div, [data-baseweb="select"] input { background-color: #ffffff !important; color: #183247 !important; -webkit-text-fill-color: #183247 !important; border-color: #b8c9d5 !important; }
 [data-testid="stTextArea"] textarea::placeholder, [data-testid="stTextInput"] input::placeholder { color: #647b8d !important; -webkit-text-fill-color: #647b8d !important; }
 [data-baseweb="popover"], [data-baseweb="popover"] > div, [data-baseweb="menu"], [role="listbox"], [role="option"] { background-color: #ffffff !important; color: #183247 !important; }
