@@ -29,6 +29,18 @@ st.markdown("""
 .result { background:#ffffff; color:#183247; border:1px solid #dce8ee; border-left:6px solid #15966a; border-radius:14px; padding:1rem 1.2rem; }
 .result * { color:#183247 !important; opacity:1 !important; }
 .small-note { color:#496174; font-size:.9rem; }
+
+/* Keep form controls and open menus readable even when the viewer prefers dark mode. */
+[data-testid="stTextArea"] textarea, [data-testid="stTextInput"] input, [data-testid="stNumberInput"] input, [data-baseweb="select"] > div, [data-baseweb="select"] input { background-color: #ffffff !important; color: #183247 !important; -webkit-text-fill-color: #183247 !important; border-color: #b8c9d5 !important; }
+[data-testid="stTextArea"] textarea::placeholder, [data-testid="stTextInput"] input::placeholder { color: #647b8d !important; -webkit-text-fill-color: #647b8d !important; }
+[data-baseweb="popover"], [data-baseweb="popover"] > div, [data-baseweb="menu"], [role="listbox"], [role="option"] { background-color: #ffffff !important; color: #183247 !important; }
+[role="option"]:hover, [aria-selected="true"][role="option"] { background-color: #e6f3ed !important; color: #123b33 !important; }
+[data-testid="stCheckbox"] [role="checkbox"] { background-color: #ffffff !important; border: 1px solid #52697a !important; }
+[data-testid="stCheckbox"] [role="checkbox"][aria-checked="true"] { background-color: #147a58 !important; border-color: #147a58 !important; }
+[data-testid="stCheckbox"] [role="checkbox"][aria-checked="true"] svg { color: #ffffff !important; fill: #ffffff !important; }
+input[type="checkbox"] { accent-color: #147a58 !important; }
+button[kind="primary"], [data-testid="stFormSubmitButton"] button { background: #147a58 !important; border-color: #147a58 !important; }
+button[kind="primary"] *, [data-testid="stFormSubmitButton"] button * { color: #ffffff !important; }
 </style>
 """, unsafe_allow_html=True)
 
