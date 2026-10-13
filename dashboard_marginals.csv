@@ -1,0 +1,25 @@
+dimension,value,complaint_count
+priority,High,4522
+priority,Low,3687
+priority,Medium,8586
+priority,Unknown,351
+priority,Urgent,1531
+sentiment,Mixed,867
+sentiment,Negative,8708
+sentiment,Neutral,3418
+sentiment,Unknown,363
+sentiment,Very Negative,5321
+resolution_status,Closed - No Response,2005
+resolution_status,Escalated,1036
+resolution_status,In Progress,2650
+resolution_status,Open,2141
+resolution_status,Resolved,10556
+resolution_status,Unknown,289
+channel,App Store Review,486
+channel,Call Transcript,1468
+channel,Email,2790
+channel,Feedback Form,1932
+channel,In-App Chat,8485
+channel,Play Store Review,1763
+channel,Social Media,1565
+channel,Unknown,188
