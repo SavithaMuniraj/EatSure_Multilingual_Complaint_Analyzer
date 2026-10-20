@@ -1,5 +1,5 @@
 from pathlib import Path
-import re, unicodedata
+import re, unicodedata; import numpy as np
 import joblib
 import pandas as pd
 import streamlit as st
@@ -95,7 +95,7 @@ def analyze(text, chosen="Auto detect", translate=False):
     model=bundle["category_model"]
     probs=model.predict_proba(raw)[0] if hasattr(model,"predict_proba") else None
     pred=str(model.classes_[int(probs.argmax())]) if probs is not None else str(model.predict(raw)[0])
-    conf=float(probs.max()) if probs is not None else None
+    conf=float(probs.max()) if probs is not None else None; feature_names=vectorizer.get_feature_names_out(); row=raw.tocsr(); class_index=list(model.classes_).index(pred); weights=((model.coef_[0] if class_index==1 else -model.coef_[0]) if model.coef_.shape[0]==1 else model.coef_[class_index]) if hasattr(model,'coef_') else model.feature_log_prob_[class_index]-np.max(np.delete(model.feature_log_prob_,class_index,axis=0),axis=0); words=dict.fromkeys(re.findall(r'[^\W_]+',clean_text(text),flags=re.UNICODE)); scores={word:sum(float(value*weights[i]) for i,value in zip(row.indices,row.data) if value*weights[i]>0 and str(feature_names[i]) in f' {word} ') for word in words}; top_features=[word for word,score in sorted(scores.items(),key=lambda item:item[1],reverse=True)[:4] if score>0]
     def optional(key):
         m=bundle.get(key+"_model")
         return str(m.predict(raw)[0]) if m is not None else "Not available"
@@ -107,7 +107,7 @@ def analyze(text, chosen="Auto detect", translate=False):
             translated=GoogleTranslator(source=code or "auto",target="en").translate(text) or ""
         except Exception as exc:
             note="Translation could not be completed right now. The original text was still analyzed."
-    return {"supported":True,"language":language,"category":pred,"confidence":conf,"subcategory":optional("subcategory"),"sentiment":optional("sentiment"),"priority":optional("priority"),"translated":translated,"note":note}
+    return {"supported":True,"language":language,"category":pred,"confidence":conf,"top_features":top_features,"subcategory":optional("subcategory"),"sentiment":optional("sentiment"),"priority":optional("priority"),"translated":translated,"note":note}
 
 def confidence_label(conf):
     if conf is None: return "Needs review"
@@ -142,7 +142,7 @@ elif page=="Analyze complaint":
             if not r["supported"]: st.warning(r["note"])
             else:
                 st.markdown(f'<div class="result"><h3>Suggested category: {r["category"]}</h3><p>{confidence_label(r["confidence"])} · Detected/selected language: {r["language"]}</p></div>',unsafe_allow_html=True)
-                m1,m2,m3=st.columns(3); m1.metric("Confidence",f'{r["confidence"]:.1%}' if r["confidence"] is not None else "N/A"); m2.metric("Suggested sentiment",r["sentiment"]); m3.metric("Suggested priority",r["priority"])
+                m1,m2,m3=st.columns(3); m1.markdown("**Top category signals**"); m1.markdown(" · ".join(r["top_features"]) if r["top_features"] else "No clear word-level signals available"); m2.metric("Suggested sentiment",r["sentiment"]); m3.metric("Suggested priority",r["priority"]); st.caption("Words shown are signals supporting this model output, not causal evidence.")
                 with st.expander("Analysis details",expanded=True):
                     st.write("**Suggested subcategory:**",r["subcategory"])
                     st.write("**Original complaint:**",complaint)
