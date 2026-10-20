@@ -172,7 +172,7 @@ elif page=="Batch analysis":
                             val=str(row[lang_col]).strip().lower()
                             selected=next((x for x in LANG_OPTIONS if x.lower()==val),"Auto detect")
                         r=analyze(row[text_col],selected,False)
-                        results.append({"detected_language":r["language"],"suggested_category":r["category"],"confidence":r["confidence"],"review_status":confidence_label(r["confidence"]),"suggested_subcategory":r["subcategory"],"suggested_sentiment":r["sentiment"],"suggested_priority":r["priority"]})
+                        results.append({"detected_language":r["language"],"suggested_category":r["category"],"top_category_signals":", ".join(r.get("top_features",[])) or "—","review_status":confidence_label(r["confidence"]),"suggested_subcategory":r["subcategory"],"suggested_sentiment":r["sentiment"],"suggested_priority":r["priority"]})
                     result=pd.concat([data.reset_index(drop=True),pd.DataFrame(results)],axis=1)
                     st.session_state["batch_result"]=result
         except Exception as exc: st.error(f"Could not read or analyze this CSV: {exc}")
