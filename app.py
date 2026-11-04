@@ -1,9 +1,11 @@
 from pathlib import Path
-import re, unicodedata; import numpy as np
+import re, unicodedata
+import numpy as np
 import joblib
 import pandas as pd
 import streamlit as st
 import plotly.express as px
+import requests
 
 st.set_page_config(page_title="EatSure Complaint Intelligence", page_icon="🍽️", layout="wide", initial_sidebar_state="expanded")
 
@@ -68,6 +70,128 @@ def load_marginals():
     return pd.read_csv(p) if p.exists() else pd.DataFrame()
 
 bundle=load_bundle(); vectorizer=bundle["vectorizer"]
+
+def auth_config():
+    try:
+        return {
+            "supabase_url": st.secrets["SUPABASE_URL"].rstrip("/"),
+            "supabase_anon_key": st.secrets["SUPABASE_ANON_KEY"],
+            "username_login_url": st.secrets["USERNAME_LOGIN_URL"],
+        }
+    except Exception:
+        return None
+
+def auth_request(path, payload, access_token=None):
+    cfg=auth_config()
+    if not cfg: raise RuntimeError("Authentication is not configured yet. Add the Supabase values to Streamlit secrets.")
+    headers={"apikey":cfg["supabase_anon_key"],"Content-Type":"application/json"}
+    if access_token: headers["Authorization"]=f"Bearer {access_token}"
+    response=requests.post(f'{cfg["supabase_url"]}/auth/v1/{path}',json=payload,headers=headers,timeout=20)
+    if not response.ok:
+        try: detail=response.json().get("msg") or response.json().get("message") or "Request failed."
+        except Exception: detail="Request failed."
+        raise RuntimeError(detail)
+    return response.json() if response.content else {}
+
+def gateway_request(payload):
+    cfg=auth_config()
+    if not cfg: raise RuntimeError("Authentication is not configured yet.")
+    response=requests.post(cfg["username_login_url"],json=payload,headers={
+        "apikey":cfg["supabase_anon_key"],"Authorization":f'Bearer {cfg["supabase_anon_key"]}',
+        "Content-Type":"application/json",
+    },timeout=20)
+    if not response.ok:
+        raise RuntimeError(response.json().get("error","Authentication request failed."))
+    return response.json()
+
+def render_auth_page():
+    st.markdown('<div class="hero"><h1>EatSure Complaint Intelligence</h1><p>Create an account or sign in to continue.</p></div>',unsafe_allow_html=True)
+    if not auth_config():
+        st.info("Account access is being configured. The app owner must connect Supabase and an email delivery provider before public registration can work.")
+        st.stop()
+    tabs=st.tabs(["Log in","Sign up","Forgot password"])
+    with tabs[0]:
+        with st.form("login_form"):
+            username=st.text_input("Username")
+            password=st.text_input("Password",type="password")
+            do_login=st.form_submit_button("Log in",type="primary",use_container_width=True)
+        if do_login:
+            try:
+                session=gateway_request({"action":"login","username":username.strip(),"password":password})
+                st.session_state["auth_access_token"]=session["access_token"]
+                st.session_state["auth_user"]=session["user"]
+                st.rerun()
+            except Exception as exc: st.error(str(exc))
+    with tabs[1]:
+        with st.form("signup_form"):
+            email=st.text_input("Gmail address",placeholder="name@gmail.com")
+            username=st.text_input("Create username",max_chars=30)
+            password=st.text_input("Create password",type="password")
+            confirm=st.text_input("Confirm password",type="password")
+            do_signup=st.form_submit_button("Create account",type="primary",use_container_width=True)
+        if do_signup:
+            if not re.fullmatch(r"[A-Za-z0-9_]{3,30}",username.strip()): st.error("Use 3–30 letters, numbers, or underscores for your username.")
+            elif not email.strip().lower().endswith("@gmail.com"): st.error("Enter a Gmail address ending in @gmail.com.")
+            elif len(password)<10: st.error("Use a password with at least 10 characters.")
+            elif password!=confirm: st.error("The passwords do not match.")
+            else:
+                try:
+                    auth_request("signup",{"email":email.strip().lower(),"password":password,"data":{"username":username.strip()}})
+                    st.session_state["pending_signup_email"]=email.strip().lower()
+                    st.success("Check your Gmail for the verification code, then enter it below.")
+                except Exception as exc: st.error(str(exc))
+        if st.session_state.get("pending_signup_email"):
+            with st.form("signup_verify_form"):
+                signup_code=st.text_input("Email verification code",max_chars=12)
+                verify_signup=st.form_submit_button("Verify Gmail")
+            if verify_signup:
+                try:
+                    session=auth_request("verify",{"email":st.session_state["pending_signup_email"],"token":signup_code.strip(),"type":"signup"})
+                    st.session_state["auth_access_token"]=session["access_token"]
+                    st.session_state["auth_user"]=session["user"]
+                    del st.session_state["pending_signup_email"]
+                    st.rerun()
+                except Exception as exc: st.error(str(exc))
+    with tabs[2]:
+        st.caption("Request a one-time code using the Gmail address or username on your account.")
+        with st.form("reset_request_form"):
+            account=st.text_input("Gmail address or username")
+            request_code=st.form_submit_button("Send reset code")
+        if request_code:
+            try:
+                gateway_request({"action":"reset_request","account":account.strip()})
+                st.session_state["reset_account"]=account.strip()
+                st.success("If the account exists, a reset code has been sent to its Gmail.")
+            except Exception as exc: st.error(str(exc))
+        if st.session_state.get("reset_account"):
+            with st.form("reset_verify_form"):
+                reset_code=st.text_input("Email reset code",max_chars=12)
+                new_password=st.text_input("New password",type="password")
+                confirm_new=st.text_input("Confirm new password",type="password")
+                reset=st.form_submit_button("Reset password",type="primary")
+            if reset:
+                if len(new_password)<10: st.error("Use a password with at least 10 characters.")
+                elif new_password!=confirm_new: st.error("The passwords do not match.")
+                else:
+                    try:
+                        gateway_request({"action":"reset_complete","account":st.session_state["reset_account"],"token":reset_code.strip(),"password":new_password})
+                        del st.session_state["reset_account"]
+                        st.success("Password reset. You can now log in with your username and new password.")
+                    except Exception as exc: st.error(str(exc))
+    st.stop()
+
+if not st.session_state.get("auth_access_token"):
+    render_auth_page()
+
+auth_user=st.session_state.get("auth_user") or {}
+auth_email=auth_user.get("email", "")
+auth_username=(auth_user.get("user_metadata") or {}).get("username", "")
+st.sidebar.title("EatSure Intelligence")
+st.sidebar.caption(f"Signed in as {auth_username or auth_email}")
+if st.sidebar.button("Log out",use_container_width=True):
+    st.session_state.pop("auth_access_token",None)
+    st.session_state.pop("auth_user",None)
+    st.rerun()
 SUPPORTED={"english / hinglish","english","hinglish","hindi","tamil","telugu","kannada"}
 LANG_OPTIONS=["Auto detect","English","Hinglish","Hindi","Tamil","Telugu","Kannada","Malayalam","Bengali","Gujarati","Punjabi","Other / unsure"]
 
@@ -95,7 +219,41 @@ def analyze(text, chosen="Auto detect", translate=False):
     model=bundle["category_model"]
     probs=model.predict_proba(raw)[0] if hasattr(model,"predict_proba") else None
     pred=str(model.classes_[int(probs.argmax())]) if probs is not None else str(model.predict(raw)[0])
-    conf=float(probs.max()) if probs is not None else None; feature_names=vectorizer.get_feature_names_out(); row=raw.tocsr(); class_index=list(model.classes_).index(pred); weights=((model.coef_[0] if class_index==1 else -model.coef_[0]) if model.coef_.shape[0]==1 else model.coef_[class_index]) if hasattr(model,'coef_') else model.feature_log_prob_[class_index]-np.max(np.delete(model.feature_log_prob_,class_index,axis=0),axis=0); words=dict.fromkeys(re.findall(r'[^\W_]+',clean_text(text),flags=re.UNICODE)); scores={word:sum(float(value*weights[i]) for i,value in zip(row.indices,row.data) if value*weights[i]>0 and str(feature_names[i]) in f' {word} ') for word in words}; top_features=[word for word,score in sorted(scores.items(),key=lambda item:item[1],reverse=True)[:4] if score>0]
+    conf=float(probs.max()) if probs is not None else None
+    # Explain the predicted label with the strongest positive character n-gram
+    # evidence, grouped back into readable words from the original complaint.
+    top_features=[]
+    if hasattr(model,"coef_"):
+        class_index=list(model.classes_).index(pred)
+        coef=model.coef_
+        if coef.shape[0]==1 and len(model.classes_)==2:
+            class_weights=coef[0] if class_index==1 else -coef[0]
+        else:
+            class_weights=coef[class_index]
+    elif hasattr(model,"feature_log_prob_"):
+        class_index=list(model.classes_).index(pred)
+        other=np.delete(model.feature_log_prob_,class_index,axis=0)
+        class_weights=model.feature_log_prob_[class_index]-other.max(axis=0)
+    else:
+        class_weights=None
+    if class_weights is not None:
+        feature_names=vectorizer.get_feature_names_out()
+        row=raw.tocsr()
+        evidence={}
+        words=re.findall(r"[^\W_]+",clean_text(text),flags=re.UNICODE)
+        unique_words=list(dict.fromkeys(words))
+        for feature_index,value in zip(row.indices,row.data):
+            contribution=float(value*class_weights[feature_index])
+            if contribution<=0:
+                continue
+            gram=str(feature_names[feature_index])
+            owners=[word for word in unique_words if gram in f" {word} "]
+            if not owners:
+                continue
+            share=contribution/len(owners)
+            for word in owners:
+                evidence[word]=evidence.get(word,0.0)+share
+        top_features=[word for word,score in sorted(evidence.items(),key=lambda item:item[1],reverse=True)[:4] if score>0]
     def optional(key):
         m=bundle.get(key+"_model")
         return str(m.predict(raw)[0]) if m is not None else "Not available"
@@ -113,7 +271,6 @@ def confidence_label(conf):
     if conf is None: return "Needs review"
     return "High confidence" if conf>=.75 else "Review recommended" if conf>=.50 else "Manual review recommended"
 
-st.sidebar.title("EatSure Intelligence")
 page=st.sidebar.radio("Navigate",["Overview","Analyze complaint","Batch analysis","Insights","About the model"])
 st.sidebar.caption("Multilingual • code-mixed • character n-gram NLP")
 
@@ -124,7 +281,7 @@ if page=="Overview":
     for col,label,value in zip(cols,["Categories","Supported languages","Model test accuracy","Test macro-F1"],[len(bundle["labels"]["category"]),"6",f'{bundle["metadata"].get("test_accuracy",0):.1%}',f'{bundle["metadata"].get("test_macro_f1",0):.1%}']): col.metric(label,value)
     st.subheader("Start with a task")
     a,b,c=st.columns(3)
-    a.info("**Analyze one complaint**\n\nDetect language, classify the issue, and review confidence.")
+    a.info("**Analyze one complaint**\n\nDetect language, classify the issue, and see which words most influenced the category.")
     b.info("**Analyze a CSV**\n\nAdd model results to a file and download it for follow-up.")
     c.info("**Explore patterns**\n\nFilter aggregate trends by category, language, priority, and channel.")
     st.caption("Predictions are decision support. Confirm low-confidence or sensitive cases with a human reviewer.")
@@ -141,8 +298,15 @@ elif page=="Analyze complaint":
             r=analyze(complaint,language,do_translate)
             if not r["supported"]: st.warning(r["note"])
             else:
-                st.markdown(f'<div class="result"><h3>Suggested category: {r["category"]}</h3><p>{confidence_label(r["confidence"])} · Detected/selected language: {r["language"]}</p></div>',unsafe_allow_html=True)
-                m1,m2,m3=st.columns(3); m1.markdown("**Top category signals**"); m1.markdown(" · ".join(r["top_features"]) if r["top_features"] else "No clear word-level signals available"); m2.metric("Suggested sentiment",r["sentiment"]); m3.metric("Suggested priority",r["priority"]); st.caption("Words shown are signals supporting this model output, not causal evidence.")
+                st.markdown(f'<div class="result"><h3>Suggested category: {r["category"]}</h3><p>Detected/selected language: {r["language"]} · {confidence_label(r["confidence"])}</p></div>',unsafe_allow_html=True)
+                m1,m2,m3=st.columns(3)
+                m1.markdown("**Top category signals**")
+                if r["top_features"]:
+                    m1.markdown(" ".join(f"`{feature}`" for feature in r["top_features"]))
+                else:
+                    m1.caption("No clear word-level signals available")
+                m2.metric("Suggested sentiment",r["sentiment"]); m3.metric("Suggested priority",r["priority"])
+                st.caption("Signals are words from the complaint that most supported the suggested category. They explain this model prediction and are not causal evidence.")
                 with st.expander("Analysis details",expanded=True):
                     st.write("**Suggested subcategory:**",r["subcategory"])
                     st.write("**Original complaint:**",complaint)
