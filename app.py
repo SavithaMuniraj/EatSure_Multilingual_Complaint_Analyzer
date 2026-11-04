@@ -132,7 +132,7 @@ def render_auth_page():
         if do_signup:
             if not re.fullmatch(r"[A-Za-z0-9_]{3,30}",username.strip()): st.error("Use 3–30 letters, numbers, or underscores for your username.")
             elif not email.strip().lower().endswith("@gmail.com"): st.error("Enter a Gmail address ending in @gmail.com.")
-            elif len(password)<10: st.error("Use a password with at least 10 characters.")
+            elif len(password)<5: st.error("Use a password with at least 5 characters.")
             elif password!=confirm: st.error("The passwords do not match.")
             else:
                 try:
@@ -170,7 +170,7 @@ def render_auth_page():
                 confirm_new=st.text_input("Confirm new password",type="password")
                 reset=st.form_submit_button("Reset password",type="primary")
             if reset:
-                if len(new_password)<10: st.error("Use a password with at least 10 characters.")
+                if len(new_password)<5: st.error("Use a password with at least 5 characters.")
                 elif new_password!=confirm_new: st.error("The passwords do not match.")
                 else:
                     try:
