@@ -138,20 +138,18 @@ def render_auth_page():
                 try:
                     auth_request("signup",{"email":email.strip().lower(),"password":password,"data":{"username":username.strip()}})
                     st.session_state["pending_signup_email"]=email.strip().lower()
-                    st.success("Check your Gmail for the verification code, then enter it below.")
+                    st.success("Account created. Click the confirmation link sent to Gmail.")
                 except Exception as exc: st.error(str(exc))
         if st.session_state.get("pending_signup_email"):
-            with st.form("signup_verify_form"):
-                signup_code=st.text_input("Email verification code",max_chars=12)
-                verify_signup=st.form_submit_button("Verify Gmail")
-            if verify_signup:
-                try:
-                    session=auth_request("verify",{"email":st.session_state["pending_signup_email"],"token":signup_code.strip(),"type":"signup"})
-                    st.session_state["auth_access_token"]=session["access_token"]
-                    st.session_state["auth_user"]=session["user"]
-                    del st.session_state["pending_signup_email"]
-                    st.rerun()
-                except Exception as exc: st.error(str(exc))
+            with st.container(border=True):
+                st.caption("Gmail confirmation")
+                st.write("Open Gmail and click the confirmation link to activate your account. Then return here and sign in.")
+                st.link_button("Open Gmail", "https://mail.google.com/", use_container_width=True)
+                if st.button("Resend confirmation email", key="resend_signup_confirmation"):
+                    try:
+                        auth_request("resend", {"email": st.session_state["pending_signup_email"], "type": "signup"})
+                        st.success("A new confirmation link was sent. Check Gmail and spam.")
+                    except Exception as exc: st.error(str(exc))
     with tabs[2]:
         st.caption("Request a one-time code using the Gmail address or username on your account.")
         with st.form("reset_request_form"):
