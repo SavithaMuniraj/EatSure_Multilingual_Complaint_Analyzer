@@ -1,0 +1,6 @@
+{
+  "name": "eatsure-complaint-intelligence-web",
+  "private": true,
+  "type": "module",
+  "description": "Browser code loads the pinned Supabase JS 2.118.0 ESM build from esm.sh."
+}
