@@ -57,7 +57,7 @@ The public Insights page uses grouped aggregate counts rather than individual co
 
 ## Customer workspace
 
-The Customers page groups the bundled dataset by its customer ID and shows the total customer count, one-record customers, repeat complainants, frequent complainants, and common categories. “One recorded complaint” means one complaint in this dataset; it does not prove the person is a new customer. Complaint text is not displayed or copied into customer profiles. Names, optional email/phone, and notes are saved in `public.customer_profiles` under the signed-in account, protected by RLS. The current dataset has 22,000 complaint records and 7,970 customer IDs; 5,810 IDs appear more than once. Rows without a customer ID are excluded from customer-level counts.
+The Customers page groups the bundled dataset by its customer ID and shows the total customer count, one-record customers, repeat complainants, frequent complainants, and common categories. “One recorded complaint” means one complaint in this dataset; it does not prove the person is a new customer. Complaint text is not displayed or copied into customer profiles. Names, optional email/phone, and notes are saved in `public.customer_profiles` under the signed-in account, protected by RLS. The current dataset has 22,000 complaint records and 7,969 identified customer IDs; 5,809 IDs appear more than once. 113 records have no customer ID and are excluded from customer-level counts.
 
 Run [`supabase/customer_profiles.sql`](supabase/customer_profiles.sql) in Supabase SQL Editor to create the customer details table.
 
