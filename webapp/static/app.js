@@ -23,7 +23,9 @@ const showNotice = (message, kind = "success") => {
 async function initialize() {
   try {
     const currentUrl = new URL(location.href);
-    recoveryCallbackPending = currentUrl.searchParams.get("type") === "recovery" || currentUrl.hash.includes("type=recovery");
+    const callbackParams = new URLSearchParams(currentUrl.hash.replace(/^#/, ""));
+    const callbackCode = currentUrl.searchParams.get("error_code") || callbackParams.get("error_code");
+    recoveryCallbackPending = currentUrl.searchParams.get("recovery") === "1" || currentUrl.searchParams.get("type") === "recovery" || currentUrl.hash.includes("type=recovery") || callbackCode === "otp_expired";
     const response = await fetch("/api/config");
     const config = await response.json();
     if (!response.ok) throw new Error(config.detail || "App configuration is missing.");
@@ -39,7 +41,7 @@ async function initialize() {
     });
     if (recoveryCallbackPending) {
       if (session) { recoveryCallbackPending = false; renderRecoveryPasswordForm(); }
-      else { authShell("forgot"); showNotice("Your reset link may have expired. Request a new code or reset link.", "error"); }
+      else { authShell("forgot"); showNotice("This email link is invalid or expired. You can request a new password reset link below.", "error"); }
     } else render();
   } catch (error) {
     root.innerHTML = `<main class="auth-bg"><section class="card auth-card"><h1>EatSure setup needed</h1><div class="notice error">${escapeHtml(error.message)}</div><p class="muted">The web service needs its Supabase URL and publishable key configured.</p></section></main>`;
@@ -50,7 +52,7 @@ function authShell(mode="login") {
   clearInterval(resetCooldownTimer);
   const selected = mode === "signup" ? 1 : 0;
   const headline = mode === "signup" ? "Create your account" : mode === "forgot" ? "Reset your password" : "Sign in to EatSure";
-  root.innerHTML = `<main class="auth-bg"><section class="card auth-card"><header class="auth-heading"><div class="brand-mark" style="margin:auto">🍽️</div><h1>${headline}</h1><div class="muted small">Complaint intelligence for customer care teams</div></header><div data-status></div>${mode !== "forgot" ? `<div class="auth-tabs"><button data-auth-mode="login" class="${selected===0?"active":""}">Sign in</button><button data-auth-mode="signup" class="${selected===1?"active":""}">Create account</button></div>` : ""}<form id="auth-form" novalidate>${mode === "login" ? `<div class="field"><label for="login-id">Username or Gmail</label><input id="login-id" autocomplete="username" required placeholder="Your username or name@gmail.com"></div><div class="field"><label for="login-password">Password</label><div class="password-input"><input id="login-password" type="password" autocomplete="current-password" required><button class="password-toggle" type="button" data-toggle-password aria-label="Show password" aria-pressed="false">Show</button></div></div><button class="button" style="width:100%">Sign in</button><div class="auth-footer"><button type="button" class="link-button" data-auth-mode="forgot">Forgot password?</button></div>` : mode === "signup" ? `<div class="field"><label for="signup-email">Gmail address</label><input id="signup-email" type="email" autocomplete="email" placeholder="name@gmail.com" required></div><div class="field"><label for="signup-username">Create username</label><input id="signup-username" autocomplete="username" minlength="3" maxlength="30" pattern="[A-Za-z0-9_]+" required></div><div class="field"><label for="signup-password">Create password (minimum 5 characters)</label><input id="signup-password" type="password" autocomplete="new-password" minlength="5" required></div><div class="field"><label for="signup-confirm">Confirm password</label><input id="signup-confirm" type="password" autocomplete="new-password" minlength="5" required></div><button class="button" style="width:100%">Create account</button><p class="auth-footer">We’ll email a confirmation link to activate your account.</p>` : `<div class="field"><label for="reset-account">Username or Gmail address</label><input id="reset-account" autocomplete="username" required placeholder="Your username or name@gmail.com"></div><button class="button" id="send-reset-code" type="button" style="width:100%">Send reset code</button><p class="muted small reset-help" id="reset-help">We’ll send a one-time code to the Gmail address linked to your account.</p><section id="reset-fields" class="reset-fields" hidden><div class="field"><label for="reset-code">Email reset code</label><input id="reset-code" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="6-digit code"></div><div class="field"><label for="reset-password">New password</label><div class="password-input"><input id="reset-password" type="password" minlength="5" autocomplete="new-password"><button class="password-toggle" type="button" data-toggle-password aria-label="Show password" aria-pressed="false">Show</button></div></div><div class="field"><label for="reset-confirm">Confirm new password</label><div class="password-input"><input id="reset-confirm" type="password" minlength="5" autocomplete="new-password"><button class="password-toggle" type="button" data-toggle-password aria-label="Show password" aria-pressed="false">Show</button></div></div><button class="button" type="submit" id="complete-reset" style="width:100%">Reset password</button><button class="link-button resend-reset" type="button" id="resend-reset-code" disabled>Resend code</button></section><div class="auth-footer"><button type="button" class="link-button" data-auth-mode="login">Back to sign in</button></div>`}</form><div class="auth-footer">Your customer workspace is private to your account.</div></section></main>`;
+  root.innerHTML = `<main class="auth-bg"><section class="card auth-card"><header class="auth-heading"><div class="brand-mark" style="margin:auto">🍽️</div><h1>${headline}</h1><div class="muted small">Complaint intelligence for customer care teams</div></header><div data-status></div>${mode !== "forgot" ? `<div class="auth-tabs"><button data-auth-mode="login" class="${selected===0?"active":""}">Sign in</button><button data-auth-mode="signup" class="${selected===1?"active":""}">Create account</button></div>` : ""}<form id="auth-form" novalidate>${mode === "login" ? `<div class="field"><label for="login-id">Username or Gmail</label><input id="login-id" autocomplete="username" required placeholder="Your username or name@gmail.com"></div><div class="field"><label for="login-password">Password</label><div class="password-input"><input id="login-password" type="password" autocomplete="current-password" required><button class="password-toggle" type="button" data-toggle-password aria-label="Show password" aria-pressed="false">Show</button></div></div><button class="button" style="width:100%">Sign in</button><div class="auth-footer"><button type="button" class="link-button" data-auth-mode="forgot">Forgot password?</button></div>` : mode === "signup" ? `<div class="field"><label for="signup-email">Gmail address</label><input id="signup-email" type="email" autocomplete="email" placeholder="name@gmail.com" required></div><div class="field"><label for="signup-username">Create username</label><input id="signup-username" autocomplete="username" minlength="3" maxlength="30" pattern="[A-Za-z0-9_]+" required></div><div class="field"><label for="signup-password">Create password (minimum 5 characters)</label><input id="signup-password" type="password" autocomplete="new-password" minlength="5" required></div><div class="field"><label for="signup-confirm">Confirm password</label><input id="signup-confirm" type="password" autocomplete="new-password" minlength="5" required></div><button class="button" style="width:100%">Create account</button><p class="auth-footer">We’ll email a confirmation link to activate your account.</p>` : `<div class="field"><label for="reset-account">Username or Gmail address</label><input id="reset-account" autocomplete="username" required placeholder="Your username or name@gmail.com"></div><button class="button" id="send-reset-link" type="button" style="width:100%">Email me a reset link</button><p class="muted small reset-help" id="reset-help">We’ll email a secure password reset link to the Gmail address linked to your account. Open the link to choose a new password.</p><div class="auth-footer"><button type="button" class="link-button" data-auth-mode="login">Back to sign in</button></div>`}</form><div class="auth-footer">Your customer workspace is private to your account.</div></section></main>`;
   root.querySelectorAll("[data-auth-mode]").forEach((button) => button.addEventListener("click", () => authShell(button.dataset.authMode)));
   root.querySelectorAll("[data-toggle-password]").forEach((passwordToggle) => {
     const passwordInput = passwordToggle.closest(".password-input")?.querySelector("input");
@@ -65,71 +67,40 @@ function authShell(mode="login") {
     });
   });
   if (mode === "forgot") {
-    const requestButton = root.querySelector("#send-reset-code");
-    const resendButton = root.querySelector("#resend-reset-code");
-    const resetFields = root.querySelector("#reset-fields");
-    const requestCode = async (button) => {
-      const account = root.querySelector("#reset-account").value.trim();
+    const requestButton = root.querySelector("#send-reset-link");
+    const accountInput = root.querySelector("#reset-account");
+    const sendResetLink = async () => {
+      const account = accountInput.value.trim();
       if (!account) return showNotice("Enter the username or Gmail address on your account.", "error");
       if (account.includes("@") && !/^[^\s@]+@gmail\.com$/i.test(account)) return showNotice("Enter a Gmail address ending in @gmail.com, or use your username.", "error");
       if (!account.includes("@") && !/^[A-Za-z0-9_]{3,30}$/.test(account)) return showNotice("Enter your Gmail address or your 3–30 character username.", "error");
-      button.disabled = true;
-      const originalLabel = button.id === "resend-reset-code" ? "Resend code" : "Send reset code";
-      button.textContent = "Sending…";
+      requestButton.disabled = true;
+      requestButton.textContent = "Sending reset link…";
       try {
-        await gateway({action:"reset_request", account, redirect_to:location.origin});
-        resetFields.hidden = false;
-        root.querySelector("#reset-code").value = "";
-        root.querySelector("#reset-help").textContent = "If the account exists, a reset code was sent to its Gmail. Check your Inbox and Spam folder.";
-        showNotice("Request submitted. Check the Gmail linked to your account, including Spam.");
-        startResetCooldown(resendButton);
-        if (button === requestButton) root.querySelector("#reset-code").focus();
+        await gateway({action:"reset_request", account, redirect_to:`${location.origin}/?recovery=1`});
+        showNotice("If an account matches those details, a password reset link has been emailed. Check Gmail, including Spam.");
+        let remaining = 60;
+        requestButton.textContent = `Resend reset link in ${remaining}s`;
+        clearInterval(resetCooldownTimer);
+        resetCooldownTimer = setInterval(() => {
+          remaining -= 1;
+          if (remaining <= 0) {
+            clearInterval(resetCooldownTimer);
+            requestButton.disabled = false;
+            requestButton.textContent = "Resend reset link";
+          } else requestButton.textContent = `Resend reset link in ${remaining}s`;
+        }, 1000);
       } catch (error) {
-        showNotice(error.message || "We couldn’t send a reset code. Please try again later.", "error");
-        button.disabled = false;
-        button.textContent = originalLabel;
+        showNotice(error.message || "We couldn’t send the reset link. Please try again later.", "error");
+        requestButton.disabled = false;
+        requestButton.textContent = "Email me a reset link";
       }
     };
-    const startResetCooldown = (button) => {
-      let remaining = 60;
-      button.disabled = true;
-      button.textContent = `Resend code in ${remaining}s`;
+    requestButton.addEventListener("click", sendResetLink);
+    accountInput.addEventListener("input", () => {
       clearInterval(resetCooldownTimer);
-      resetCooldownTimer = setInterval(() => {
-        remaining -= 1;
-        if (remaining <= 0) {
-          clearInterval(resetCooldownTimer);
-          button.disabled = false;
-          button.textContent = "Resend code";
-        } else button.textContent = `Resend code in ${remaining}s`;
-      }, 1000);
-    };
-    requestButton.addEventListener("click", () => requestCode(requestButton));
-    resendButton.addEventListener("click", () => requestCode(resendButton));
-    root.querySelector("#reset-account").addEventListener("input", () => {
-      clearInterval(resetCooldownTimer);
-      requestButton.disabled = false; requestButton.textContent = "Send reset code";
-      resendButton.disabled = true; resendButton.textContent = "Resend code"; resetFields.hidden = true;
-      root.querySelector("#reset-code").value = "";
-      root.querySelector("#reset-password").value = "";
-      root.querySelector("#reset-confirm").value = "";
-    });
-    root.querySelector("#auth-form").addEventListener("submit", async (event) => {
-      event.preventDefault();
-      const account=root.querySelector("#reset-account").value.trim(); const token=root.querySelector("#reset-code").value.trim(); const password=root.querySelector("#reset-password").value; const confirm=root.querySelector("#reset-confirm").value; const button=root.querySelector("#complete-reset");
-      if (!account) return showNotice("Enter the username or Gmail address on your account.", "error");
-      if (!/^\d{6}$/.test(token)) return showNotice("Enter the 6-digit code sent to Gmail.","error");
-      if (password.length<5) return showNotice("Use a password with at least 5 characters.","error");
-      if (password!==confirm) return showNotice("The passwords do not match.","error");
-      button.disabled = true; button.textContent = "Updating password…";
-      try {
-        await gateway({action:"reset_complete",account,token,password});
-        authShell("login");
-        showNotice("Password reset successfully. Sign in with your new password.");
-      } catch (error) {
-        showNotice(error.message || "The reset code may be invalid or expired. Request a new one and try again.","error");
-        button.disabled = false; button.textContent = "Reset password";
-      }
+      requestButton.disabled = false;
+      requestButton.textContent = "Email me a reset link";
     });
     return;
   }
@@ -160,7 +131,7 @@ function authShell(mode="login") {
 function renderRecoveryPasswordForm() {
   if (!activeSession) {
     authShell("forgot");
-    showNotice("Your reset link may have expired. Request a new code or reset link.", "error");
+    showNotice("This password reset link is invalid or has expired. Request a new reset link below.", "error");
     return;
   }
   root.innerHTML = `<main class="auth-bg"><section class="card auth-card"><header class="auth-heading"><div class="brand-mark" style="margin:auto">🍽️</div><h1>Choose a new password</h1><div class="muted small">Set a new password for your EatSure account</div></header><div data-status></div><form id="link-reset-form" novalidate><div class="field"><label for="link-reset-password">New password (minimum 5 characters)</label><div class="password-input"><input id="link-reset-password" type="password" minlength="5" autocomplete="new-password" required><button class="password-toggle" type="button" data-link-toggle aria-label="Show password" aria-pressed="false">Show</button></div></div><div class="field"><label for="link-reset-confirm">Confirm new password</label><div class="password-input"><input id="link-reset-confirm" type="password" minlength="5" autocomplete="new-password" required><button class="password-toggle" type="button" data-link-toggle aria-label="Show password" aria-pressed="false">Show</button></div></div><button class="button" id="save-link-password" style="width:100%">Update password</button></form><div class="auth-footer">Your customer workspace is private to your account.</div></section></main>`;
@@ -182,16 +153,17 @@ function renderRecoveryPasswordForm() {
     if (password !== confirm) return showNotice("The passwords do not match.", "error");
     button.disabled = true;
     button.textContent = "Updating password…";
-    const { error } = await supabase.auth.updateUser({ password });
-    if (error) {
+    try {
+      const { error } = await supabase.auth.updateUser({ password });
+      if (error) throw error;
+      await supabase.auth.signOut();
+      authShell("login");
+      showNotice("Password reset successfully. Sign in with your new password.");
+    } catch (error) {
       showNotice(error.message || "Could not update the password. Request a new reset link and try again.", "error");
       button.disabled = false;
       button.textContent = "Update password";
-      return;
     }
-    await supabase.auth.signOut();
-    authShell("login");
-    showNotice("Password reset successfully. Sign in with your new password.");
   });
 }
 
