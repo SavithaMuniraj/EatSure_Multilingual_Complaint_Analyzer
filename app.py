@@ -98,15 +98,21 @@ def load_marginals():
 
 @st.cache_data
 def load_customer_activity():
-    """Return customer-level aggregates only; never expose complaint text here."""
+    """Build customer and monthly aggregates from source rows without exposing complaint text."""
     path=Path(__file__).parent/"eatsure_complaints_feedback.csv"
-    if not path.exists(): return pd.DataFrame()
+    if not path.exists(): return pd.DataFrame(), pd.DataFrame(), {}
     columns=["complaint_id","customer_id","complaint_timestamp","category"]
     data=pd.read_csv(path,usecols=lambda name:name in columns)
-    if "customer_id" not in data or "complaint_timestamp" not in data: return pd.DataFrame()
+    if "customer_id" not in data or "complaint_timestamp" not in data: return pd.DataFrame(), pd.DataFrame(), {}
+    total_rows=len(data)
     data["customer_id"]=data["customer_id"].fillna("").astype(str).str.strip()
+    missing_customer_rows=int(data.customer_id.eq("").sum())
     data=data[data.customer_id.ne("")]
     data["complaint_timestamp"]=pd.to_datetime(data["complaint_timestamp"],errors="coerce",utc=True).dt.tz_convert(None)
+    valid_dates=data.complaint_timestamp.dropna()
+    monthly=(data.dropna(subset=["complaint_timestamp"])
+             .assign(month=lambda frame: frame.complaint_timestamp.dt.to_period("M").dt.to_timestamp())
+             .groupby("month",as_index=False).size().rename(columns={"size":"complaints"}))
     aggregations={"total_complaints":("customer_id","size"),"first_complaint":("complaint_timestamp","min"),"last_complaint":("complaint_timestamp","max")}
     customers=data.groupby("customer_id",as_index=False).agg(**aggregations)
     if "category" in data:
@@ -115,7 +121,10 @@ def load_customer_activity():
         customers=customers.merge(top[["customer_id","category"]].rename(columns={"category":"common_category"}),on="customer_id",how="left")
     else: customers["common_category"]="—"
     customers["cohort"]=np.where(customers.total_complaints.gt(1),"Repeat complainant","One recorded complaint")
-    return customers
+    summary={"source_rows":total_rows,"rows_with_customer_id":len(data),"rows_without_customer_id":missing_customer_rows,
+             "customer_count":int(customers.customer_id.nunique()),"first_date":valid_dates.min() if not valid_dates.empty else pd.NaT,
+             "last_date":valid_dates.max() if not valid_dates.empty else pd.NaT}
+    return customers, monthly, summary
 
 bundle=load_bundle(); vectorizer=bundle["vectorizer"]
 
@@ -445,7 +454,7 @@ elif page=="Batch analysis":
 
 elif page=="Customers":
     st.markdown('<div class="hero"><h1>Customer workspace</h1><p>Review customer-level complaint patterns and maintain private customer details for your account.</p></div>',unsafe_allow_html=True)
-    activity=load_customer_activity()
+    activity, monthly_activity, data_summary=load_customer_activity()
     if activity.empty:
         st.info("No customer IDs were found in the bundled complaint dataset.")
     else:
@@ -465,25 +474,50 @@ elif page=="Customers":
         repeat=int(customers.total_complaints.gt(1).sum())
         repeat_complaints=int(customers.loc[customers.total_complaints.gt(1),"total_complaints"].sum())
         k1,k2,k3,k4=st.columns(4)
-        k1.metric("Total customers",f"{len(customers):,}")
-        k2.metric("One recorded complaint",f"{one_time:,}")
-        k3.metric("Repeat complainants",f"{repeat:,}")
-        k4.metric("Complaints from repeat customers",f"{repeat_complaints:,}")
-        st.caption("“One recorded complaint” means one complaint in the supplied dataset; it may not mean the customer's first complaint ever. Complaint text is not shown or copied into the customer profile table.")
-        left,right=st.columns([1,1.35])
+        k1.metric("Customers with an ID",f"{len(customers):,}")
+        k2.metric("Complaint records",f"{data_summary['source_rows']:,}")
+        k3.metric("Repeat complainants",f"{repeat:,}",f"{repeat/len(customers):.1%} of identified customers")
+        k4.metric("Records from repeat customers",f"{repeat_complaints:,}",f"{repeat_complaints/data_summary['rows_with_customer_id']:.1%} of records with an ID")
+        start=data_summary["first_date"].strftime("%d %b %Y") if pd.notna(data_summary["first_date"]) else "—"
+        end=data_summary["last_date"].strftime("%d %b %Y") if pd.notna(data_summary["last_date"]) else "—"
+        st.caption(f"Source: bundled complaint dataset · {start} to {end} · {data_summary['rows_without_customer_id']:,} records have no customer ID and are excluded from customer-level counts. ‘One recorded complaint’ means one row in this dataset, not proof of a customer's first-ever complaint. Complaint text is never copied into customer profiles.")
+        st.subheader("At a glance")
         cohort_counts=pd.DataFrame({"Customer group":["One recorded complaint","Repeat complainant"],"Customers":[one_time,repeat]})
-        left.plotly_chart(px.bar(cohort_counts,x="Customer group",y="Customers",color="Customer group",color_discrete_sequence=["#43a982","#4679c6"],title="One-time and repeat customers"),use_container_width=True,showlegend=False)
-        repeat_table=customers[customers.total_complaints.gt(1)].sort_values(["total_complaints","last_complaint"],ascending=[False,False]).head(10)
-        right.subheader("Most frequent complainants")
-        if repeat_table.empty: right.info("No repeat complainants in the dataset.")
-        else: right.dataframe(repeat_table[["customer_id","total_complaints","common_category","last_complaint"]].rename(columns={"customer_id":"Customer ID","total_complaints":"Complaints","common_category":"Most common category","last_complaint":"Most recent complaint"}),use_container_width=True,hide_index=True)
+        cohort_fig=px.bar(cohort_counts,x="Customer group",y="Customers",color="Customer group",color_discrete_sequence=["#43a982","#4679c6"],title="Customers by recorded complaint count")
+        cohort_fig.update_layout(showlegend=False,margin=dict(t=55,b=10),yaxis_title="Customers",xaxis_title="")
+        cohort_fig.update_traces(texttemplate="%{y:,}",textposition="outside",cliponaxis=False)
+        trend_fig=px.line(monthly_activity,x="month",y="complaints",markers=True,title="Complaint records by month (with customer ID)",color_discrete_sequence=["#147a58"])
+        trend_fig.update_layout(margin=dict(t=55,b=10),xaxis_title="Month",yaxis_title="Records",hovermode="x unified")
+        left,right=st.columns([1,1.35])
+        left.plotly_chart(cohort_fig,use_container_width=True)
+        right.plotly_chart(trend_fig,use_container_width=True)
+        repeat_table=customers[customers.total_complaints.gt(1)].sort_values(["total_complaints","last_complaint"],ascending=[False,False]).head(10).copy()
+        repeat_table["last_complaint"]=repeat_table.last_complaint.dt.strftime("%d %b %Y")
+        st.subheader("Customers with the most recorded complaints")
+        st.caption("Ranked from the supplied dataset by customer ID; ties are ordered by most recent record.")
+        if repeat_table.empty: st.info("No repeat complainants in the dataset.")
+        else: st.dataframe(repeat_table[["customer_id","total_complaints","common_category","last_complaint"]].rename(columns={"customer_id":"Customer ID","total_complaints":"Complaint records","common_category":"Most common category","last_complaint":"Most recent record"}),use_container_width=True,hide_index=True)
         st.subheader("Customer details")
-        query=st.text_input("Search by customer ID or display name",placeholder="Type a customer ID or name")
+        filters=st.columns([1,1.5,1.2])
+        group_filter=filters[0].selectbox("Complaint group",["All customers","One recorded complaint","Repeat complainant"])
+        query=filters[1].text_input("Search customer ID or name",placeholder="Type a customer ID or name")
+        sort_choice=filters[2].selectbox("Sort by",["Most complaints","Most recent record","Customer ID"])
         visible=customers.copy()
+        if group_filter!="All customers": visible=visible[visible.cohort.eq(group_filter)]
         if query.strip():
             needle=query.strip().casefold()
             visible=visible[visible.customer_id.str.casefold().str.contains(needle,regex=False)|visible.display_name.astype(str).str.casefold().str.contains(needle,regex=False)]
-        st.dataframe(visible[["customer_id","display_name","total_complaints","cohort","common_category","first_complaint","last_complaint"]].rename(columns={"customer_id":"Customer ID","display_name":"Name","total_complaints":"Complaints","cohort":"Complaint group","common_category":"Most common category","first_complaint":"First recorded complaint","last_complaint":"Latest complaint"}),use_container_width=True,hide_index=True,height=360)
+        if sort_choice=="Most complaints": visible=visible.sort_values(["total_complaints","last_complaint"],ascending=[False,False])
+        elif sort_choice=="Most recent record": visible=visible.sort_values("last_complaint",ascending=False)
+        else: visible=visible.sort_values("customer_id")
+        visible_dates=visible[["first_complaint","last_complaint"]].copy()
+        for date_col in visible_dates: visible_dates[date_col]=visible_dates[date_col].dt.strftime("%d %b %Y").fillna("—")
+        display=visible[["customer_id","display_name","total_complaints","cohort","common_category"]].copy()
+        display["First recorded complaint"]=visible_dates.first_complaint
+        display["Latest record"]=visible_dates.last_complaint
+        display=display.rename(columns={"customer_id":"Customer ID","display_name":"Name","total_complaints":"Complaint records","cohort":"Complaint group","common_category":"Most common category"})
+        st.caption(f"Showing {len(display):,} of {len(customers):,} customers. Dates and complaint totals come from dataset records.")
+        st.dataframe(display,use_container_width=True,hide_index=True,height=420)
         st.subheader("Edit customer")
         customer_ref=st.selectbox("Select customer",customers.customer_id.tolist(),format_func=lambda ref: f"{customers.loc[customers.customer_id.eq(ref),'display_name'].iloc[0] or ref} · {int(customers.loc[customers.customer_id.eq(ref),'total_complaints'].iloc[0])} complaint(s)")
         selected=customers.loc[customers.customer_id.eq(customer_ref)].iloc[0]
