@@ -99,6 +99,38 @@ def customers(_user: dict[str, Any] = Depends(require_user)):
     return {"customers": customer_activity()}
 
 
+@app.get("/api/overview")
+def overview(_user: dict[str, Any] = Depends(require_user)):
+    bundle = model_bundle()
+    metadata = bundle.get("metadata", {})
+    return {
+        "categories": list(bundle.get("labels", {}).get("category", [])),
+        "supported_languages": ["English", "Hinglish", "Hindi", "Tamil", "Telugu", "Kannada"],
+        "test_accuracy": float(metadata.get("test_accuracy", 0)),
+        "test_macro_f1": float(metadata.get("test_macro_f1", 0)),
+    }
+
+
+@app.get("/api/insights")
+def insights(_user: dict[str, Any] = Depends(require_user)):
+    """Return coarse, pre-aggregated data only; no complaint text or customer IDs."""
+    def records(filename: str, columns: tuple[str, ...]) -> list[dict[str, Any]]:
+        path = ROOT / filename
+        if not path.exists():
+            return []
+        frame = pd.read_csv(path, usecols=lambda column: column in columns).fillna("")
+        output = []
+        for row in frame.to_dict(orient="records"):
+            output.append({key: (int(value) if key == "complaint_count" else str(value)) for key, value in row.items()})
+        return output
+
+    return {
+        "monthly": records("dashboard_aggregates.csv", ("month", "category", "language", "complaint_count")),
+        "subcategories": records("dashboard_subcategories.csv", ("category", "sub_category", "complaint_count")),
+        "marginals": records("dashboard_marginals.csv", ("dimension", "value", "complaint_count")),
+    }
+
+
 class ComplaintRequest(BaseModel):
     text: str = Field(min_length=2, max_length=5000)
     language: str = "Auto detect"
