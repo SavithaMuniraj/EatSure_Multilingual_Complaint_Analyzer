@@ -22,6 +22,8 @@ A multilingual complaint intelligence dashboard for exploring customer issues wr
 
 **[Launch EatSure Complaint Intelligence on Streamlit](https://eatsuremultilingualcomplaintanalyzer-tyctof4c6nrp9wrcpwtrrf.streamlit.app/)**
 
+**[Open the standalone EatSure web app](https://eatsure-complaint-intelligence-savitha.onrender.com/)**
+
 ## Features
 
 - **Overview:** summary cards for category count, supported languages, test accuracy, and macro-F1.
