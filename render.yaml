@@ -1,0 +1,12 @@
+services:
+  - type: web
+    name: eatsure-complaint-intelligence-savitha
+    runtime: python
+    plan: free
+    buildCommand: pip install -r webapp/requirements.txt
+    startCommand: uvicorn webapp.api:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: SUPABASE_URL
+        value: https://qgpbvbamakutlvwbgaxk.supabase.co
+      - key: SUPABASE_ANON_KEY
+        sync: false
