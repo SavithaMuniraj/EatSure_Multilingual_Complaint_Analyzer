@@ -8,6 +8,9 @@ create table if not exists public.user_profiles (
 
 alter table public.user_profiles enable row level security;
 revoke all on public.user_profiles from anon, authenticated;
+drop policy if exists user_profiles_no_direct_access on public.user_profiles;
+create policy user_profiles_no_direct_access on public.user_profiles
+  for all to anon, authenticated using (false) with check (false);
 
 create or replace function public.create_user_profile()
 returns trigger language plpgsql security definer set search_path = '' as $$
@@ -31,3 +34,6 @@ drop trigger if exists on_auth_user_created_profile on auth.users;
 create trigger on_auth_user_created_profile
 after insert on auth.users
 for each row execute function public.create_user_profile();
+
+-- The trigger owns the profile creation path; the function is not an RPC API.
+revoke execute on function public.create_user_profile() from public, anon, authenticated;
