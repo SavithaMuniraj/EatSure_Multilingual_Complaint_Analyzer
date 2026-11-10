@@ -30,6 +30,15 @@ async function initialize() {
     const config = await response.json();
     if (!response.ok) throw new Error(config.detail || "App configuration is missing.");
     supabase = createClient(config.supabaseUrl, config.supabaseAnonKey, {auth:{flowType:"pkce",persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}});
+    // Establish Supabase recovery sessions from the callback fragment before rendering the auth screen.
+    const recoveryAccessToken = callbackParams.get("access_token");
+    const recoveryRefreshToken = callbackParams.get("refresh_token");
+    if (recoveryCallbackPending && recoveryAccessToken && recoveryRefreshToken) {
+      const {data: recoveryData, error: recoveryError} = await supabase.auth.setSession({access_token:recoveryAccessToken, refresh_token:recoveryRefreshToken});
+      if (recoveryError) throw recoveryError;
+      activeSession = recoveryData.session;
+      history.replaceState(null, "", currentUrl.pathname + "?recovery=1");
+    }
     const {data:{session}} = await supabase.auth.getSession();
     activeSession = session;
     supabase.auth.onAuthStateChange((event, nextSession) => {
