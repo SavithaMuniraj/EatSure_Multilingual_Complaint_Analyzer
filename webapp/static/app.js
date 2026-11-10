@@ -2,8 +2,8 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.118.0";
 
 const root = document.getElementById("app");
 let supabase;
-let activeSession = null;
-let recoveryCallbackPending = false;
+let activeSession = null;let recoveryCallbackPending = false;
+let recoveryFormActive = false;
 let activePage = "overview";
 let customerRows = [];
 let customerProfiles = [];
@@ -26,6 +26,8 @@ async function initialize() {
     const callbackParams = new URLSearchParams(currentUrl.hash.replace(/^#/, ""));
     const callbackCode = currentUrl.searchParams.get("error_code") || callbackParams.get("error_code");
     recoveryCallbackPending = currentUrl.searchParams.get("recovery") === "1" || currentUrl.searchParams.get("type") === "recovery" || currentUrl.hash.includes("type=recovery") || callbackCode === "otp_expired";
+    recoveryFormActive = recoveryCallbackPending;
+    recoveryFormActive = recoveryCallbackPending;
     const response = await fetch("/api/config");
     const config = await response.json();
     if (!response.ok) throw new Error(config.detail || "App configuration is missing.");
@@ -43,13 +45,14 @@ async function initialize() {
     activeSession = session;
     supabase.auth.onAuthStateChange((event, nextSession) => {
       activeSession = nextSession;
+      if (recoveryFormActive && nextSession && event !== "PASSWORD_RECOVERY") return;
       if (event === "PASSWORD_RECOVERY" || (recoveryCallbackPending && nextSession)) {
         recoveryCallbackPending = false;
         renderRecoveryPasswordForm();
       } else render();
     });
     if (recoveryCallbackPending) {
-      if (session) { recoveryCallbackPending = false; renderRecoveryPasswordForm(); }
+      if (session) { recoveryCallbackPending = false; recoveryFormActive = true; renderRecoveryPasswordForm(); }
       else { authShell("forgot"); showNotice("This email link is invalid or expired. You can request a new password reset link below.", "error"); }
     } else render();
   } catch (error) {
@@ -117,7 +120,7 @@ function authShell(mode="login") {
     event.preventDefault();
     const button=root.querySelector("#auth-form .button"); button.disabled=true; button.textContent="Please wait…";
     try {
-      if (mode === "login") {
+      if (mode === "login") { recoveryFormActive = false;
         const result=await gateway({action:"login",username:root.querySelector("#login-id").value.trim(),password:root.querySelector("#login-password").value});
         const {error}=await supabase.auth.setSession({access_token:result.access_token,refresh_token:result.refresh_token});
         if(error) throw error;
